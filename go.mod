@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/AlekSi/pointer v1.2.0
 	github.com/gocarina/gocsv v0.0.0-20240520201108-78e41c74b4b1
+	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
 )

@@ -3,35 +3,37 @@ package main
 import (
 	"bytes"
 	"encoding/csv"
-	"errors"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"os/exec"
 
 	"github.com/AlekSi/pointer"
 	"github.com/gocarina/gocsv"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/client_model/go"
 )
 
 var (
-	flagPort    = flag.Int("port", 9586, "Port to listen on")
-	flagCommand = flag.String("cmd", "wg", "WireGuard command")
+	port = flag.Int("port", 9586, "Port to listen on")
+	cmd  = flag.String("cmd", "wg", "WireGuard command")
 )
 
 func main() {
 	flag.Parse()
 	http.Handle("/metrics", promhttp.HandlerFor(prometheus.GathererFunc(gather), promhttp.HandlerOpts{}))
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", *flagPort), nil); !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal(err)
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", *port), nil); !errors.Is(err, http.ErrServerClosed) {
+		slog.Error("failed to start server", "error", err)
+		os.Exit(1)
 	}
 }
 
 func gather() ([]*io_prometheus_client.MetricFamily, error) {
-	out, err := exec.Command("sh", "-c", *flagCommand).Output()
+	out, err := exec.Command("sh", "-c", *cmd).Output()
 	if err != nil {
 		return nil, err
 	}
@@ -39,12 +41,17 @@ func gather() ([]*io_prometheus_client.MetricFamily, error) {
 	reader := csv.NewReader(bytes.NewReader(out))
 	reader.Comma = '\t'
 
+	log := slog.With("out", string(out))
 	if _, err := reader.Read(); err != nil {
+		log.Error("failed to skip header", "error", err)
 		return nil, err
 	}
 
+	reader.FieldsPerRecord = 0
+
 	var peers []Peer
 	if err := gocsv.UnmarshalCSVWithoutHeaders(reader, &peers); err != nil {
+		log.Error("failed to decode records", "error", err)
 		return nil, err
 	}
 
@@ -109,5 +116,5 @@ type Peer struct {
 	LatestHandshake     int64  `csv:"5"`
 	SentBytes           int64  `csv:"6"`
 	ReceivedBytes       int64  `csv:"7"`
-	PersistentKeepalive int64  `csv:"8"`
+	PersistentKeepalive string `csv:"8"`
 }
